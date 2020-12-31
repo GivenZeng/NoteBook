@@ -1,0 +1,2 @@
+- https://engineering.linecorp.com/en/blog/go-gc/
+- https://blog.golang.org/ismmkeynote

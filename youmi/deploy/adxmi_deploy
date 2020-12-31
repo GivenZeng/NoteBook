@@ -1,0 +1,42 @@
+## 准备
+先安装mysql、redis、zookeeper、kafka等软件
+
+
+## 测试
+```
+cd RUN    //RUN目录有测试用的makefile，编译后自动运行，并一般自动使用 ${GOSRC}/git.umlife.net/adxmi/adn/RUN/proj_conf对应的项目的etc的conf.sample.yml
+make -B target_module
+make adapj RUN_ONLY=true  //只跑bubuild
+```
+* 如果运行无法找到conf，可以使用 -conf conf_path指定
+* 如果配置参数失败，可以更改RUN/proj_conf对应的项目的etc的conf.sample.yml
+
+## 生产
+adn目录下的makefile指负责build，不会自动运行
+```
+cd adn
+make -B target_module
+cd bin
+./target_module -conf conf_path
+```
+有时配置文件是错误的，如adfetchx的配置
+
+
+### 部署
+新服务部署
+```
+ssh awsjp-ma
+adn project_name -H log-01 -v master -t compile -m "compile"
+
+adn project_name -H log-01 -v master -t install -m "install mess"
+切换到gwadm，再install一次
+su gwadm
+adn project_name -H log-01 -v master -t install -m "install mess"
+```
+
+
+运行旧服务
+```
+adn project_name -H monitor-01 -v master -t deploy -m 'deploy mess'
+adn project_name -H monitor-01 -v master -t config,restart -m 'restart message'
+```

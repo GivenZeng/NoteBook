@@ -1,0 +1,1 @@
+*  migo.Panic(err error)
