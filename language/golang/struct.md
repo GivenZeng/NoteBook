@@ -1,1 +1,0 @@
-https://golangbot.com/structs/
