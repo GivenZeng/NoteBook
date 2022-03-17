@@ -1,12 +1,15 @@
 ## create project
 ```sh
-mvn archetype:generate "-DgroupId=cn.zenggiven.flink" "-DartifactId=flink_start" "-DarchetypeArtifactId=maven-archetype-quickstart" "-DinteractiveMode=false"
+mvn archetype:generate "-DgroupId=cn.zenggiven.hello" "-DartifactId=hello" "-DarchetypeArtifactId=maven-archetype-quickstart" "-DinteractiveMode=false"
 ```
 
 ## build
 ```
 mvn clean package
 ```
+
+## run
+ mvn compile exec:java -Dexec.mainClass="cn.zenggiven.hello.App"
 
 
 ## Unknown lifecycle phase "mvn".
