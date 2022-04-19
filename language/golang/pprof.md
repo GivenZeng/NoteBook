@@ -11,6 +11,7 @@ import (
 
 go tool pprof http://localhost:port/debug/pprof/profile
 go tool pprof http://localhost:port/debug/pprof/heap
+go tool pprof http://localhost:port/debug/pprof/goroutine > profile.svg
 wget http://localhost:xxx/debug/pprof/goroutine?debug=1
 go tool pprof -svg http://localhost:port/debug/pprof/profile > profile.svg
 go tool pprof http://localhost:port/debug/pprof/heap > heap.svp
