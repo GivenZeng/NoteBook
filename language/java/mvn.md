@@ -1,6 +1,10 @@
 ## create project
 ```sh
+java
 mvn archetype:generate "-DgroupId=cn.zenggiven.hello" "-DartifactId=hello" "-DarchetypeArtifactId=maven-archetype-quickstart" "-DinteractiveMode=false"
+
+scala
+mvn archetype:generate -DarchetypeGroupId=cn.zenggiven.scalalearn -DarchetypeArtifactId=org.scala-tools.archetypes:scala-archetype-simple  "-DinteractiveMode=false"
 ```
 
 ## build
