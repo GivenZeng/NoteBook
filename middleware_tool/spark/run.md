@@ -29,3 +29,10 @@ mvn package
 - total-executor-cores：可用核数，如：100
 - num-executors：executor数量50
 - application-arguments：运行jar文件所需的命令行参数
+
+# 运行模式/TODO
+- local
+- standalone
+- spark on yarn
+  - client
+  - cluster
