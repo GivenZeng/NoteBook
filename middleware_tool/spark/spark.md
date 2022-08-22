@@ -108,12 +108,15 @@ Spark的计算是针对RDD，为我们屏蔽了底层的数据存储系统。一
 - Driver：负责运行你写的Spark程序。
 
 ## 不同运行模式下的架构图
+### local
+单节点多线程，来模拟分布式运行环境，主要用于本地运行、开发、调试
+
 ### standalone
 <p align="center">
 <img src="./img/spark_standalone.png" alt="Spark standalone独立集群运行模式" width="400" height="240"/>
 </p>
 
-### yarn-client
+### yarn-clientw
 <p align="center">
 <img src="./img/spark_yarn_client.png" alt="Spark yarn-client运行模式" width="400" height="240"/>
 </p>
@@ -131,3 +134,4 @@ Spark的计算是针对RDD，为我们屏蔽了底层的数据存储系统。一
 - https://cloud.tencent.com/developer/article/1005706
 - https://www.cnblogs.com/tgzhu/p/5818374.html
 - [RDD](https://jaceklaskowski.gitbooks.io/mastering-apache-spark/spark-rdd.html)
+- [spark 教程](https://www.hadoopdoc.com/spark/spark-intro)
