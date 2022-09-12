@@ -116,7 +116,7 @@ Spark的计算是针对RDD，为我们屏蔽了底层的数据存储系统。一
 <img src="./img/spark_standalone.png" alt="Spark standalone独立集群运行模式" width="400" height="240"/>
 </p>
 
-### yarn-clientw
+### yarn-client
 <p align="center">
 <img src="./img/spark_yarn_client.png" alt="Spark yarn-client运行模式" width="400" height="240"/>
 </p>
