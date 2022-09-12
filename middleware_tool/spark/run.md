@@ -6,7 +6,7 @@ document:
 - example: https://github.com/GivenZeng/java/spark_quick
 
 ## submit
-```
+```sh
 mvn package
 
 ./bin/spark-submit \

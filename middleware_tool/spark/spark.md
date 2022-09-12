@@ -1,6 +1,6 @@
 Apache Spark是一个针对大规模数据处理的统一分析引擎，是一种快速通用的集群计算系统。它提供Java，Scala，Python和R中的高级API，以及支持通用执行图的优化引擎。它还支持一组丰富的高级工具，包括用于SQL和结构化数据处理的Spark SQL，用于机器学习的MLlib，用于图形处理的GraphX和Spark Streaming。(官方提供了四种API编程接口：java、scala、python、r)
 
-[试用](https://spark.apache.org/docs/latest)
+[tutorial](https://spark.apache.org/docs/latest)
 
 
 <p align="center">
@@ -13,7 +13,7 @@ Spark是基于内存的迭代计算框架。随着数据规模、操作次数的
 
 ## spark运行层次
 <p align="center">
-<img src="./img/spark_level.png" alt="Spark运行层次" width="400" height="240"/>
+<img src="./img/spark_level.png" alt="Spark运行层次" width="800" height="400"/>
 </p>
 
 - Application: Appliction都是指用户编写的Spark应用程序，其中包括一个Driver功能的代码和分布在集群中多个节点上运行的Executor代码
@@ -29,18 +29,18 @@ Spark是基于内存的迭代计算框架。随着数据规模、操作次数的
 - Stage: 每个Job会被拆分成多组Task， 作为一个TaskSet， 其名称为Stage，Stage的划分和调度是有DAGScheduler来负责的，Stage有非最终的Stage（Shuffle - Map Stage）和最终的Stage（Result Stage）两种，Stage的边界就是发生shuffle的地方
 - DAGScheduler: 根据Job构建基于Stage的DAG（Directed Acyclic Graph有向无环图)，并提交Stage给TASkScheduler。 其划分Stage的依据是RDD之间的依赖的关系找出开销最小的调度方法，如下图
 <p align="center">
-<img src="./img/spark_dag_scheduler.png" alt="DAGScheduler" width="400" height="240"/>
+<img src="./img/spark_dag_scheduler.png" alt="DAGScheduler" width="600" height="240"/>
 </p>
 
 - TASKSedulter: 将TaskSET提交给worker运行，每个Executor运行什么Task就是在此处分配的. TaskScheduler维护所有TaskSet，当Executor向Driver发生心跳时，TaskScheduler会根据资源剩余情况分配相应的Task。另外TaskScheduler还维护着所有Task的运行标签，重试失败的Task。下图展示了TaskScheduler的作用
 <p align="center">
-<img src="./img/spark_task_scheduler.png" alt="TaskScheduler" width="400" height="240"/>
+<img src="./img/spark_task_scheduler.png" alt="TaskScheduler" width="600" height="240"/>
 </p>
 
 
 ## Spark使用过程
 <p align="center">
-<img src="./img/spark_code_model.jpg" alt="Spark编程模型" width="400" height="240"/>
+<img src="./img/spark_code_model.jpg" alt="Spark编程模型" width="600" height="240"/>
 </p>
 
 - 使用SparkContext/SQLContext/StreamingContext等连接外部数据，如文本、SQL、流式数据
@@ -48,16 +48,16 @@ Spark是基于内存的迭代计算框架。随着数据规模、操作次数的
 - 集群管理器将任务分发到各个woker上，woker创建executor来处理任务。
 
 <p align="center">
-<img src="./img/spark_rdd.png" alt="RDD的流动图" width="400" height="240"/>
+<img src="./img/spark_rdd.png" alt="RDD的流动图" width="600" height="240"/>
 </p>
 
 <p align="center">
-<img src="./img/spark_stage.png" alt="spark stage" width="400" height="240"/>
+<img src="./img/spark_stage.png" alt="spark stage" width="600" height="240"/>
 </p>
 
 
 SparkWordCountWithScala.scala 例子
-```
+```java
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
 
@@ -75,7 +75,7 @@ object SparkWordCountWithScala {
     //创建SparkCore的程序入口
     val sc = new SparkContext(conf)
     //读取文件 生成RDD
-    val file: RDD[String] = sc.textFile("E:\\hello.txt")
+    val file: RDD[String] = sc.textFile("/tmp/hello.txt")
     //把每一行数据按照，分割
     val word: RDD[String] = file.flatMap(_.split(","))
     //让每一个单词都出现一次
@@ -85,14 +85,14 @@ object SparkWordCountWithScala {
     //按照单词出现的次数 降序排序
     val sortRdd: RDD[(String, Int)] = wordCount.sortBy(tuple => tuple._2,false)
     //将最终的结果进行保存
-    sortRdd.saveAsTextFile("E:\\result")
+    sortRdd.saveAsTextFile("/tmp/result")
     sc.stop()
   }
 ```
 
 ## 计算流程
 <p align="center">
-<img src="./img/spark_compute_process.jpg" alt="Spark计算流程" width="400" height="240"/>
+<img src="./img/spark_compute_process.jpg" alt="Spark计算流程" width="600" height="240"/>
 </p>
 RDD可以看做是对各种数据计算模型的统一抽象，Spark的计算过程主要是RDD的迭代计算过程。RDD的迭代计算过程非常类似于管道。分区数量取决于partition数量的设定，每个分区的数据只会在一个Task中计算。所有分区可以在多个机器节点的Executor上并行执行。
 
@@ -100,7 +100,7 @@ Spark的计算是针对RDD，为我们屏蔽了底层的数据存储系统。一
 
 ## 集群基础架构
 <p align="center">
-<img src="./img/spark_architecture.png" alt="Spark集群架构" width="400" height="240"/>
+<img src="./img/spark_architecture.png" alt="Spark集群架构" width="600" height="240"/>
 </p>
 
 - Master节点：常驻Master守护进程，负责管理全部的Worker节点。
@@ -113,17 +113,17 @@ Spark的计算是针对RDD，为我们屏蔽了底层的数据存储系统。一
 
 ### standalone
 <p align="center">
-<img src="./img/spark_standalone.png" alt="Spark standalone独立集群运行模式" width="400" height="240"/>
+<img src="./img/spark_standalone.png" alt="Spark standalone独立集群运行模式" width="600" height="240"/>
 </p>
 
 ### yarn-clientw
 <p align="center">
-<img src="./img/spark_yarn_client.png" alt="Spark yarn-client运行模式" width="400" height="240"/>
+<img src="./img/spark_yarn_client.png" alt="Spark yarn-client运行模式" width="600" height="440"/>
 </p>
 
 ### yarn-cluster
 <p align="center">
-<img src="./img/spark_yarn_cluster.png" alt="Spark yarn-cluster运行模式" width="400" height="240"/>
+<img src="./img/spark_yarn_cluster.png" alt="Spark yarn-cluster运行模式" width="600" height="440"/>
 </p>
 
 
