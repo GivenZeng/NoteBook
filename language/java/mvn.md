@@ -4,7 +4,10 @@ java
 mvn archetype:generate "-DgroupId=cn.zenggiven.hello" "-DartifactId=hello" "-DarchetypeArtifactId=maven-archetype-quickstart" "-DinteractiveMode=false"
 
 scala
-mvn archetype:generate -DarchetypeGroupId=cn.zenggiven.scalalearn -DarchetypeArtifactId=org.scala-tools.archetypes:scala-archetype-simple  "-DinteractiveMode=false"
+```
+  mvn archetype:generate -B \
+    -DarchetypeGroupId=net.alchim31.maven -DarchetypeArtifactId=scala-archetype-simple -DarchetypeVersion=1.7 \
+    -DgroupId=cn.zenggiven.synchronizer -DartifactId=synchronizer -Dversion=0.1-SNAPSHOT
 ```
 
 ## build
