@@ -77,6 +77,8 @@ val agged = keyed.sum(1) // agged的类型是DataStream[(Int, Int)]
 - union是将两个类型一样的流组合起来，得到一个新的DataStream
 - connect是将两个类型不一样的流水根据某条件组合起来，得到一个ConnectedStream。
   - 如果需要按某个条件join，可以将两个流分别keyBy之后，再进行connect
+  - connect经常被应用在对一个数据流使用另外一个流进行控制处理的场景上，如下图所示。控制流可以是阈值、规则、机器学习模型或其他参数，比如数据流connect配置流
+  - 一般右侧流数据较为固定并且量级较小，我们可以通过broadcast来将右侧流发布到各个task manager，减少数据消耗
 ```java
 // stream1/2都是DataStream[T]的，即元素类型相同
 val unioned = stream1.union(stream2)
@@ -378,7 +380,7 @@ val processed = keyed.porcess(
 )
 ```
 
-相较于process需要缓存所有元素，reduce/aggregate这些增量聚合函数能在一定程度上提升窗口计算性能。对于部分情形，我们可以结合二者的优势，比如计算窗口的最大值和窗口的结束时间:
+相较于process需要缓存所有元素，reduce/aggregate这些增量聚合函数能在一定程度上提升窗口计算性能。对于部分情形(比如不需要处理所有元素，但是又需要窗口信息的)，我们可以结合二者的优势，比如计算窗口的最大值和窗口的结束时间:
 ```java
 val keyed: KeyedStream[Event] = source.keyBy(...)
 val largest = keyed.reduce(
@@ -390,5 +392,226 @@ val largest = keyed.reduce(
 )
 ```
 
-## keyby的影响范围
-## trigger的影响范围
+## [flink state](https://nightlies.apache.org/flink/flink-docs-master/docs/dev/datastream/fault-tolerance/state/)
+在有些情况下，一个窗口可能多次触发计算，并且上一次的计算的结果在下一次计算中也会用到，这时候就可以使用state来存储每次计算的结果。比如
+
+
+
+对于同一个key，每两条计算均值：
+```java
+class CountWindowAverage extends RichFlatMapFunction[(Long, Long), (Long, Long)] {
+  private var sum: ValueState[(Long, Long)] = _
+  override def flatMap(input: (Long, Long), out: Collector[(Long, Long)]): Unit = {
+    // access the state value
+    val tmpCurrentSum = sum.value
+    // If it hasn't been used before, it will be null
+    val currentSum = if (tmpCurrentSum != null) {
+      tmpCurrentSum
+    } else {
+      (0L, 0L)
+    }
+    // update the count
+    val newSum = (currentSum._1 + 1, currentSum._2 + input._2)
+    // update the state
+    sum.update(newSum)
+    // if the count reaches 2, emit the average and clear the state
+    if (newSum._1 >= 2) {
+      out.collect((input._1, newSum._2 / newSum._1))
+      sum.clear()
+    }
+  }
+
+  override def open(parameters: Configuration): Unit = {
+    sum = getRuntimeContext.getState(
+      new ValueStateDescriptor[(Long, Long)]("average", createTypeInformation[(Long, Long)])
+    )
+  }
+}
+
+
+object ExampleCountWindowAverage extends App {
+  val env = StreamExecutionEnvironment.getExecutionEnvironment
+  env.fromCollection(List(
+    (1L, 3L),
+    (1L, 5L),
+    (1L, 7L),
+    (1L, 4L),
+    (1L, 2L)
+  )).keyBy(_._1)
+    .flatMap(new CountWindowAverage())
+    .print()
+  // the printed output will be (1,4) and (1,5)
+  // 4 = (3+5)/2, 5 = (7+4)/2
+  env.execute("ExampleKeyedState")
+}
+```
+
+## trigger/窗口触发器
+每个WindowAssigner都有一个默认的trigger。flink 默认的trigger有：
+- EventTimeTrigger: 时间类型为EventTime的窗口的默认触发器，当watermark超过window 结束时间就触发
+- ProcessTimeTrigger：时间类型为ProcesstTime的窗口的默认触发器，当ProcessTime超过window 结束时间就触发
+- ContinuousEventTimeTrigger, ContinuousProcessTimeTrigger：根据间隔时间周期性触发窗口或者当window时间小于event time触发计算
+- CountTrigger: 当数量超过指定阈值就触发窗口计算
+- DeltaTrigger：根据结束数据计算出delta指标，当delta指标超过指定阈值，就触发窗口计算。当delta是事件数量，那就等价于CountTrigger
+- PUrgingTrigger：可以将任意触发器作为参数传入Purge类型触发器，计算完成后数据将被清理
+
+如果默认的trigger不满足业务需求，那可以自定义触发器（实现Trigger类）。比如当事件事件窗口里的数据超过k条就触发计算。
+
+Trigger有以下方法需要override
+- OnElement：当有新数据进入窗口是将被调用。比如当某个用户的某个事件到达，就触发计算，就可以通过该方法实现
+- OnEventTime：当注册的事件事件到达触发该函数。比如我们注册一个EventTime k，当event time为k的事件到达，flink就会调用该方法
+```java
+    // 注册一个定时器，当时间到，就触发OnEventTime
+    ctx.registerEventTimeTimer(window.getEnd - 1000*10)
+    // 删除一个定时器
+    ctx.deleteEvenTimeTimer(window.getEnd - 1000*10)
+```
+- onProcessingTime：和OnEventTime 同理
+- onMerge：该方法与有状态触发器相关，并在两个触发器的相应窗口合并时合并它们的状态，例如使用会话窗口时，来了一个新事件导致两个窗口合并，就会调用该方法
+
+以上方法的返回结果有如下枚举：
+- CONTINUE：不做任何处理
+- FIRE：触发窗口计算
+- PURGE：清空窗口的数据
+- FIRE_AND_PURGE：触发窗口计算，计算完成后清空窗口的数据
+
+当使用了自定义trigger，默认的trigger就会被覆盖掉，因此用户在自己定义触发器的时候，就需要考虑到对默认触发器中的功能是否有依赖，如果有，那就需要在自定义的trigger中实现默认trigger的逻辑。另外，global window必须指定自定义trigger，因为global window没有默认trigger。
+
+
+### evictor 剔除器
+evictor可以让你在窗口进行计算之前/之后，对窗口内的数据进行剔除处理。默认的evictor会在窗口计算之前进行数据剔除，有：
+- CountEvictor：限制窗口数据数量，舍弃旧的数据，比如阈值为5，窗口数据数量为10，那参与窗口计算的数据只有后5条
+- DeltaEvictor：通过自定义DeltaFunction（计算每个数据的指标值）和指标阈值threshold，将小于指标的数据evict
+- TimeEvictor：指定时间间隔interval，t = 当前窗口最新元素的时间减去interval，将时间小于t的数据剔除
+
+如果默认evictor不满足需求，可以自定义evictor，只需要实现Evictor接口，该接口需要实现以下两个方法：
+```java
+// 该函数在窗口计算前调用
+void evictBefore(Iterable<TimestampedValue<T>> elements, int size, W window, EvictorContext evictorContext);
+// 该函数在窗口计算后调用
+void evictAfter(Iterable<TimestampedValue<T>> elements, int size, W window, EvictorContext evictorContext);
+```
+
+Flink 不保证窗口内元素的顺序。这意味着虽然驱逐器可以从窗口开头移除元素，但这些元素不一定是先到的还是后到的。
+```java
+class MyEvictor() extends Evictor[MyTime, TimeWindow] {
+  override def evictBefore(iterable: Iterable[TimestampedValue[MyTime]], size: Int, w: TimeWindow, evictorContext: Evictor.EvictorContext): Unit = {
+    val ite: Iterator[TimestampedValue[MyTime]] = iterable.iterator()
+    while (ite.hasNext) {
+      val elment: TimestampedValue[MyTime] = ite.next()
+      //指定事件事件获取到的就是事件时间
+      println("evictor获取到的时间：" + elment.getTimestamp)
+      //模拟去掉非法参数数据
+      if (elment.getValue.timestamp <= 0) {
+        ite.remove()
+      }
+    }
+  }
+
+  override def evictAfter(iterable: Iterable[TimestampedValue[MyTime]], size: Int, w: TimeWindow, evictorContext: Evictor.EvictorContext): Unit = {
+
+  }
+}
+```
+
+## 延迟数据处理
+哪怕通过watermark指定延迟时间，但是实际中，仍旧会有数据有可能延迟很久后到达。我们可以使用Allowed Lateness来对迟到的数据进行处理。除了GlobalWindow外，其他窗口的默认Allowed Lateness是0。
+
+```java
+val lateTag = OutputTag[Your_Event_type]("your_tag_name")
+val w = keyed.window(...)
+        .allowedLateness(time.Seconds(10))
+        .sideOutputLateData(lateTag)
+        .reduce/process/aggregate()
+val late = w.getSideOutput(lateTag)
+```
+
+## [多流合并/join](https://nightlies.apache.org/flink/flink-docs-master/docs/dev/datastream/operators/joining/#interval-join)
+flink支持窗口上的多流合并，即在一个窗口中按照相同的条件对两个流进行关联。
+
+```java
+// 先key by是为了减少网络消耗
+val joined = stream1.keyBy(_._1)
+            .join(stream2.keyBy(_._1))
+            .where(_._1)
+            .equalTo(_._2)
+            .window(TumblingEventTimeWindows.of(time.seconds(10)))
+            .apply((e1, e2) => {you op}) // 聚合，e1来自stream1，e2来自stream2
+```
+![](../imgs/interval-join.svg)
+
+除了tumbling、sliding、session，还可以使用间隔关联：
+```java
+val orangeStream: DataStream[Integer] = ...
+val greenStream: DataStream[Integer] = ...
+// 先key by是为了减少网络消耗
+orangeStream
+    .keyBy(elem => /* select key */)
+    .intervalJoin(greenStream.keyBy(elem => /* select key */))
+    // orangeElem.ts + lowerBound <= greenElem.ts <= orangeElem.ts + upperBound
+    .between(Time.milliseconds(-2), Time.milliseconds(1))
+    // ProcessJoinFunction[In1, In2, OUT]
+    .process(new ProcessJoinFunction[Integer, Integer, String] {
+        override def processElement(left: Integer, right: Integer, ctx: ProcessJoinFunction[Integer, Integer, String]#Context, out: Collector[String]): Unit = {
+            out.collect(left + "," + right)
+        }
+    })
+```
+
+## 作业链
+在flink中，用户可以指定相应的链条，将相关性非常强的操作绑定在一次，让链条中的task在同一个pipeline上执行，避免数据在网络传销的开销。默认情况下，flink在例如map之类的操作中开启了Task chain，以提升flink整体性能。
+
+- 禁用全局链条，禁用后，需要用户手动指定每个操作所属的链条
+```java
+env.disableOperatorChaining()
+...
+// filter和第一个map归属于同一个chain
+// map属于第二个chain
+stream.filter(..).map(...).startNewChain().map(...)
+```
+- 禁用局部链条:关闭某些操作上的链条，如下例只禁用map操作上的链条，不会对map之前或者之后的操作产生影响
+```java
+stream.map().disableChining()
+```
+
+## slot 资源组
+默认情况下，所有的子task/操作都在一个slot group内，这样有两个好处：
+- Flink集群需要的任务槽与作业中使用的最高并行度正好相同(前提，保持默认SlotSharingGroup)。也就是说我们不需要再去计算一个程序总共会起多少个task了。
+- 更容易获得更充分的资源利用
+
+一般来说source 对io要求较高，filter、map等操作对cpu要求较高。比如假如我们将source和filter/map等划分到不同的slot group，那很有可能导致不同的slot负载不同，进而导致flink性能下降。
+
+如果一个操作符的所有input都具有相同的slot group，那么该操作符就会继承前面操作符的slot group。我们可以指定某个操作符所在slot group：
+```java
+// filter和filter之后的操作共享一个slot group，和filter之前的slot group 隔离
+stream.filter(...).slotSharingGroup("your slot group name")
+```
+
+## async io
+假如我们的操作有时候依赖外部系统，比如订单数据需要拼接用户信息，而用户信息存储在db，如果按常规操作，那就是在map function里面查询db，然后拼接用户信息。但是这种方式只能串行处理数据，性能过于低下。此时我们就可以使用async io(通过实现AsyncFunction)来提升效率：
+```java
+class AsyncDatabaseRequest extends AsyncFunction[String, (String, String)] {
+
+    lazy val client: DatabaseClient = new DatabaseClient(host, post, credentials)
+
+    implicit lazy val executor: ExecutionContext = ExecutionContext.fromExecutor(Executors.directExecutor())
+
+    override def asyncInvoke(str: String, resultFuture: ResultFuture[(String, String)]): Unit = {
+        // 异步查询，查询成功后拼接数据
+        val resultFutureRequested: Future[String] = client.query(str)
+        resultFutureRequested.onSuccess {
+            case result: String => resultFuture.complete(Iterable((str, result)))
+        }
+    }
+}
+
+val stream: DataStream[String] = ...
+// 设置async 函数的超时为1000ms，并发度100
+val resultStream: DataStream[(String, String)] =
+    AsyncDataStream.unorderedWait(stream, new AsyncDatabaseRequest(), 1000, TimeUnit.MILLISECONDS, 100)
+```
+
+- unorderedWait：乱序，只要异步操作成功就emit到下游，具有较低的延迟和负载，但是输出顺序和原本数据顺序可能不一致
+- orderWait: 顺序，运算结果需要在op buffer中缓存，知道每个任务之前的任务都运算成功，才emit到下游。具有较高延迟和负载
+
+另外，在使用event time处理流数据的过程中，async io总能保持watermark的顺序，即使使用乱序模式，输出的watermark也会保持原有的顺序，但是watermark之间的数据元素不保持原来的顺序。因此watermark会对乱序异步io造成一定的开销（为了保持watermark的顺序性，需要缓存更多的数据）

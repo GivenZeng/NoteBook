@@ -91,3 +91,4 @@ flink会根据代码执行流程生成DAG数据流图，生成顺序为stream gr
 
 # refer
 - [flink 执行流程，面试必问](https://www.51gcrc.com/job/57356)
+- [flink architecture](https://nightlies.apache.org/flink/flink-docs-master/docs/concepts/flink-architecture/)
