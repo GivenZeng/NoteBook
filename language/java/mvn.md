@@ -9,6 +9,19 @@ scala
     -DarchetypeGroupId=net.alchim31.maven -DarchetypeArtifactId=scala-archetype-simple -DarchetypeVersion=1.7 \
     -DgroupId=cn.zenggiven.synchronizer -DartifactId=synchronizer -Dversion=0.1-SNAPSHOT
 ```
+- groupId	这是工程组的标识。它在一个组织或者项目中通常是唯一的。例如，一个银行组织 com.companyname.project-group 拥有所有的和银行相关的项目。
+- artifactId	这是工程的标识。它通常是工程的名称。例如，消费者银行。groupId 和 artifactId 一起定义了 artifact 在仓库中的位置。
+- archetypeArtifactId 项目结构类型，如果不指定，生成项目的时候可以选择，maven-archetype-quickstart为简单项目
+
+- 查看一个pom的父pom：mvn help:effective-pom
+
+## 添加依赖
+mvn dependency:get -Dartifact=groupId:artifactId:version:jar:sources
+```
+mvn dependency:get -Dartifact=junit:junit:4.12:jar
+```
+
+亦或者在仓库搜索后，将配置复制下来，如：https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-core/2.17.2，将dependency复制到pom，
 
 ## build
 在pom.xml添加打包插件

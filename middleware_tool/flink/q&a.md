@@ -9,7 +9,7 @@
 - dataset 的输出算子已经包含了对execute的调用，因此无需显示调用execute
 
 ## flink有哪些数据类型
-- TypeInfomation：主要用于数据结构类。是Flink类型系统的核心，是生成序列化/反序列化工具和Comparator的工具类。在java api中，Flink无法准确的获取到数据类型。因此，在使用Java API的时候，我们需要手工指定类型。使用Scala的时候无需指定。
+- TypeInfomation：主要用于数据结构类。是Flink类型系统的核心，是生成序列化/反序列化工具和Comparator的工具类。在scala api中，Flink无法准确的获取到数据类型。因此，在使用scala API的时候，我们需要手工指定类型。使用Scala的时候无需指定。
 - BasicTypeInfo：原生数据类型，Integer、String等
 - BaseArrayTypeInfo：原生数组类型
 - TubleTypeInfo
@@ -25,7 +25,7 @@ flink自带了一些基础source：
 - socket
 - 集合
 - 外部数据源，其本质是实现了自定义的SourceFunction
-```java
+```scala
 // read by line
 val stream = env.readTextFile("your file path")
 
@@ -56,7 +56,7 @@ val stream = env.addSource(new FlinkKafkaConsumer010<>("your topic", schema, pro
 - flatmap
 - keyBy, 比如根据数据的某个基础类型字段来keyBy，如果非基础类型，那么需要复写hashCode；不支持根据数组等进行keyBy。运算之后得到KeyedStream
 - reduce，对KeyedStream使用传入的ReduceFunction进行处理。ReduceFunction必须满足结合律和交换律。
-```java
+```scala
 // 根据id进行key by，随后计算同一个id的value之和
 // 比如计算每个用户的消费总额
 val keyed = stream1.keyBy(v => v.user_id)
@@ -65,7 +65,7 @@ val reduced = keyed.reduce((v1, v2) => (v1.user_id, v1.cost + v2.cost) )
 - Aggregations：是聚合算子，其实是将Reduct算子中的函数进行封装，有sum、min、minBy、max、maxBy
   - min会根据指定的字段取最小值，并且把这个值保存在对应的位置上，对于其他的字段取了最先获取的值，不能保证每个元素的数值正确，max同理。
   - minBy会返回指定字段取最小值的元素，并且会覆盖指定字段小于当前已找到的最小值元素。maxBy同理。
-```java
+```scala
 // 根据id进行key by，随后计算同一个id的value之和
 // 比如计算每个用户的消费总额
 val stream1 = env.fromElements((1, 100), (1, 200), (2, 500))
@@ -73,30 +73,11 @@ val keyed = stream1.keyBy(0)
 val agged = keyed.sum(1) // agged的类型是DataStream[(Int, Int)]
 ```
 
-## union 和connect的区别
-- union是将两个类型一样的流组合起来，得到一个新的DataStream
-- connect是将两个类型不一样的流水根据某条件组合起来，得到一个ConnectedStream。
-  - 如果需要按某个条件join，可以将两个流分别keyBy之后，再进行connect
-  - connect经常被应用在对一个数据流使用另外一个流进行控制处理的场景上，如下图所示。控制流可以是阈值、规则、机器学习模型或其他参数，比如数据流connect配置流
-  - 一般右侧流数据较为固定并且量级较小，我们可以通过broadcast来将右侧流发布到各个task manager，减少数据消耗
-```java
-// stream1/2都是DataStream[T]的，即元素类型相同
-val unioned = stream1.union(stream2)
-```
-
-## connect 如何指定key
-使用第一个stream的第二个字段和第二个stream的第一个字段进行connect
-```java
-// 亦或者keyBy(keySelector1, keySelector2)
-stream1.connect(stream2).keyBy(1, 0)
-```
-
-
 ## 如果和拆分datat stream？split、select。和fiter的区别？
 - 使用split进行标记数据，一个数据可以有多个标记
 - 使用select选择目标标记的数据
 
-```java
+```scala
 val splited = stream.split(t => if (t._2%2 == 0) Seq("event") else Seq("odd"))
 val odd  = splited.select("odd")
 ```
@@ -104,7 +85,7 @@ val odd  = splited.select("odd")
 ## iterate的作用
 迭代操作数据直到满足某一个条件才发送给下游
 
-```java
+```scala
 val iteratedStream = someDataStream.iterate(
   iteration => {
     val iterationBody = iteration.map(/* this is executed many times */)
@@ -114,7 +95,7 @@ val iteratedStream = someDataStream.iterate(
 ```
 
 样例，比如我们需要将每个数据减至小于2才允许进入下游
-```java
+```scala
 val stream = env.fromElements(1, 3, 4, 6, 7)
 val mapped = stream.map(t => t) // 这个map作用是为了进行reblance
 val iterated = mapped.iterate(
@@ -128,24 +109,24 @@ val iterated = mapped.iterate(
 
 ## flink有那些分区器/partition
 - 随机分区，相对均衡，但是容易失去原有数据的分区结构
-```java
+```scala
 val shuffled = stream1.shuffle()
 ```
 - Roundrobin: 对全局循环分区，尽可能平衡
-```java
+```scala
 val shuffled = stream1.rebalance()
 ```
 - rescaling partition：针对上游循环分区。比如上游有两个并发度，其中一个分区有4k条记录，另一个分区有8k条记录；下游有四个分区。上游第一个分区的4k条记录会循环分到下游的四个分区；第二个同理。相对于Roundrobin，这种方式可以减少上游分区间的通信
-```java
+```scala
 val shuffled = stream1.rescale()
 ```
 - broadcasting：将数据全部复制到下游算子的并行的tasks实力中，下游算子可以直接从本地内存获取数据，不再依赖网络传输。这种策略适合于小数据集，比如当大数据集join小数据集，通过这种方式可以减少网络消耗
-```java
+```scala
 val shuffled = stream1.boradcast()
 val joined = stream2.join(shuffled).where(keySelector1).equalTo(keySelector2)
 ```
 - 自定义分区，实现自定义的Partitioner接口。比如某个用户的数据量比较大，那么我们可以指定分区0和1来处理该用户的数据
-```java
+```scala
 object customPartitioner extends Partitioner[String]{
     val r = scala.util.Random
     override def partition(key: String, numPartitions: Int): Int = {
@@ -161,7 +142,7 @@ stream1.partitionCustom(customPartitioner, "user_id")
 
 ## sink哪些
 flink自带了一些基础的sink：
-```java
+```scala
 stream.writeAsCsv("/tmp/result.csv")
 stream.writeAsCsv("/tmp/result.csv", WriteMode.OverWrite)
 stream.writeAsText("/tmp/result.txt)
@@ -169,7 +150,7 @@ stream.writeToSocket(host, port, new SimpleStreamSchema()) // 指定schema
 ```
 
 比如写入kafka
-```java
+```scala
 val producer = new FlinkKafkaProducer011[String](
     "hostx:port", "topic", new SimpleStreamSchema()   
 )
@@ -188,7 +169,7 @@ stream.addSink(producer)
 比如一个广告点击在早上10:00（event time）产生，在10:05（ingestion）被消费进flink，在10:10（process time）被某个算子（比如map）处理。
 
 flink 默认情况下使用的process time时间概念，但是在业务中，我们一般是用event time，比如统计每个小时的广告点击量、用户登录量等等，这个时候就要指定时间类型
-```java
+```scala
 evn.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
 ```
 
@@ -206,7 +187,7 @@ evn.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
 ### 在source function中设定watermark
 对于自定义source，我们可以指定event timestamp（ms），用户需要自行实现SourceFunction，并在SourceFunction的run中调用SourceContext的collectWithTimestamp方法生成时间戳，调用emitWatermark方法生成新的watermark。
 
-```java
+```scala
 // 时间类型(String, Int, Long)，表示用户名、订单金额、订单支付时间ms
 val source = new SourceFunction[(String, Int, Long)](
     override def run(ctx: SourceContext[(String, Int, Long)]: Unit ={
@@ -233,7 +214,7 @@ flink将watermark 根据生成形式分为两种类型：Periodic watermark和Pu
   - 升序：事件时间有序
   - 乱序：事件事件无序，可以指定容忍延迟间隔
 
-```java
+```scala
 // 时间类型(String, Int, Long)，表示用户名、订单金额、订单支付时间ms
 val stream: DataStream[(String, Int, Long)] = ...
 
@@ -249,7 +230,7 @@ val outOfOder: DataStream[(String, Int, Long)] = stream.assignTimestampAndWaterm
 ```
 
 上例中的两种方式已经能基本满足常见需求了，如果需要自定义Periodic watermark生成器，那可以自行实现AssignerWithPeriodicWatermark或者AssignerWithPunctuatedWatermarks，亦或者自行实现WatermarkGenerator
-```java
+```scala
 ExecutionConfig.setAutoWatermarkInteraval(1000) // 每1s生成watermark，即每1s调用onPeriodicEmit
 
 val wg =  new WatermarkGenerator[(String, Int, Long)]{
@@ -270,7 +251,7 @@ val wg =  new WatermarkGenerator[(String, Int, Long)]{
 有了watermark后，我们就可以指定时间窗口，当watermark到达window.getEnd就触发计算。比如统计每小时的每个用户支付金额。
 
 常见的操作如下：
-```java
+```scala
 stream.keyBy(...)
 .window(...)
 [.trigger(...)]
@@ -291,7 +272,7 @@ stream.keyBy(...)
 
 ### window assigner
 对于keyedStream和dataStream，需要使用不同的assigner来指定窗口
-```java
+```scala
 val w = keyed.window(windowAssigner)
 
 val w = dataStream.windowAll(windowAllAssigner)
@@ -303,7 +284,7 @@ val w = dataStream.windowAll(windowAllAssigner)
 - session window：会话窗口
 - global window：全局窗口
 
-```java
+```scala
 // 滚动，1 min
 // 根据不同时间类型有TumblingEventTimeWindows和TumblingProcessTimeWindows
 // 以下两种窗口指定方式是等价的
@@ -340,12 +321,12 @@ val w = keyed.window(GlobalWindows.create()).tigger(...)
 ```
 
 针对none keyed，我们用的是全局窗口：
-```java
+```scala
 ```
 
 ### window function 窗口计算
 常见的窗口计算有reduce、aggregate、process、fold（已废弃）
-```java
+```scala
 val result = w.reduce((e1, e2) => {...})
 
 // reduce 是对aggregate的封装，适用于逻辑较为简单的计算
@@ -381,7 +362,7 @@ val processed = keyed.porcess(
 ```
 
 相较于process需要缓存所有元素，reduce/aggregate这些增量聚合函数能在一定程度上提升窗口计算性能。对于部分情形(比如不需要处理所有元素，但是又需要窗口信息的)，我们可以结合二者的优势，比如计算窗口的最大值和窗口的结束时间:
-```java
+```scala
 val keyed: KeyedStream[Event] = source.keyBy(...)
 val largest = keyed.reduce(
     (e1, e2 => myMax(e1, e2)), // myMax 实现自定义的reduce
@@ -398,7 +379,7 @@ val largest = keyed.reduce(
 
 
 对于同一个key，每两条计算均值：
-```java
+```scala
 class CountWindowAverage extends RichFlatMapFunction[(Long, Long), (Long, Long)] {
   private var sum: ValueState[(Long, Long)] = _
   override def flatMap(input: (Long, Long), out: Collector[(Long, Long)]): Unit = {
@@ -460,7 +441,7 @@ object ExampleCountWindowAverage extends App {
 Trigger有以下方法需要override
 - OnElement：当有新数据进入窗口是将被调用。比如当某个用户的某个事件到达，就触发计算，就可以通过该方法实现
 - OnEventTime：当注册的事件事件到达触发该函数。比如我们注册一个EventTime k，当event time为k的事件到达，flink就会调用该方法
-```java
+```scala
     // 注册一个定时器，当时间到，就触发OnEventTime
     ctx.registerEventTimeTimer(window.getEnd - 1000*10)
     // 删除一个定时器
@@ -485,7 +466,7 @@ evictor可以让你在窗口进行计算之前/之后，对窗口内的数据进
 - TimeEvictor：指定时间间隔interval，t = 当前窗口最新元素的时间减去interval，将时间小于t的数据剔除
 
 如果默认evictor不满足需求，可以自定义evictor，只需要实现Evictor接口，该接口需要实现以下两个方法：
-```java
+```scala
 // 该函数在窗口计算前调用
 void evictBefore(Iterable<TimestampedValue<T>> elements, int size, W window, EvictorContext evictorContext);
 // 该函数在窗口计算后调用
@@ -493,7 +474,7 @@ void evictAfter(Iterable<TimestampedValue<T>> elements, int size, W window, Evic
 ```
 
 Flink 不保证窗口内元素的顺序。这意味着虽然驱逐器可以从窗口开头移除元素，但这些元素不一定是先到的还是后到的。
-```java
+```scala
 class MyEvictor() extends Evictor[MyTime, TimeWindow] {
   override def evictBefore(iterable: Iterable[TimestampedValue[MyTime]], size: Int, w: TimeWindow, evictorContext: Evictor.EvictorContext): Unit = {
     val ite: Iterator[TimestampedValue[MyTime]] = iterable.iterator()
@@ -517,7 +498,7 @@ class MyEvictor() extends Evictor[MyTime, TimeWindow] {
 ## 延迟数据处理
 哪怕通过watermark指定延迟时间，但是实际中，仍旧会有数据有可能延迟很久后到达。我们可以使用Allowed Lateness来对迟到的数据进行处理。除了GlobalWindow外，其他窗口的默认Allowed Lateness是0。
 
-```java
+```scala
 val lateTag = OutputTag[Your_Event_type]("your_tag_name")
 val w = keyed.window(...)
         .allowedLateness(time.Seconds(10))
@@ -526,43 +507,12 @@ val w = keyed.window(...)
 val late = w.getSideOutput(lateTag)
 ```
 
-## [多流合并/join](https://nightlies.apache.org/flink/flink-docs-master/docs/dev/datastream/operators/joining/#interval-join)
-flink支持窗口上的多流合并，即在一个窗口中按照相同的条件对两个流进行关联。
-
-```java
-// 先key by是为了减少网络消耗
-val joined = stream1.keyBy(_._1)
-            .join(stream2.keyBy(_._1))
-            .where(_._1)
-            .equalTo(_._2)
-            .window(TumblingEventTimeWindows.of(time.seconds(10)))
-            .apply((e1, e2) => {you op}) // 聚合，e1来自stream1，e2来自stream2
-```
-![](../imgs/interval-join.svg)
-
-除了tumbling、sliding、session，还可以使用间隔关联：
-```java
-val orangeStream: DataStream[Integer] = ...
-val greenStream: DataStream[Integer] = ...
-// 先key by是为了减少网络消耗
-orangeStream
-    .keyBy(elem => /* select key */)
-    .intervalJoin(greenStream.keyBy(elem => /* select key */))
-    // orangeElem.ts + lowerBound <= greenElem.ts <= orangeElem.ts + upperBound
-    .between(Time.milliseconds(-2), Time.milliseconds(1))
-    // ProcessJoinFunction[In1, In2, OUT]
-    .process(new ProcessJoinFunction[Integer, Integer, String] {
-        override def processElement(left: Integer, right: Integer, ctx: ProcessJoinFunction[Integer, Integer, String]#Context, out: Collector[String]): Unit = {
-            out.collect(left + "," + right)
-        }
-    })
-```
 
 ## 作业链
 在flink中，用户可以指定相应的链条，将相关性非常强的操作绑定在一次，让链条中的task在同一个pipeline上执行，避免数据在网络传销的开销。默认情况下，flink在例如map之类的操作中开启了Task chain，以提升flink整体性能。
 
 - 禁用全局链条，禁用后，需要用户手动指定每个操作所属的链条
-```java
+```scala
 env.disableOperatorChaining()
 ...
 // filter和第一个map归属于同一个chain
@@ -570,7 +520,7 @@ env.disableOperatorChaining()
 stream.filter(..).map(...).startNewChain().map(...)
 ```
 - 禁用局部链条:关闭某些操作上的链条，如下例只禁用map操作上的链条，不会对map之前或者之后的操作产生影响
-```java
+```scala
 stream.map().disableChining()
 ```
 
@@ -582,14 +532,14 @@ stream.map().disableChining()
 一般来说source 对io要求较高，filter、map等操作对cpu要求较高。比如假如我们将source和filter/map等划分到不同的slot group，那很有可能导致不同的slot负载不同，进而导致flink性能下降。
 
 如果一个操作符的所有input都具有相同的slot group，那么该操作符就会继承前面操作符的slot group。我们可以指定某个操作符所在slot group：
-```java
+```scala
 // filter和filter之后的操作共享一个slot group，和filter之前的slot group 隔离
 stream.filter(...).slotSharingGroup("your slot group name")
 ```
 
 ## async io
 假如我们的操作有时候依赖外部系统，比如订单数据需要拼接用户信息，而用户信息存储在db，如果按常规操作，那就是在map function里面查询db，然后拼接用户信息。但是这种方式只能串行处理数据，性能过于低下。此时我们就可以使用async io(通过实现AsyncFunction)来提升效率：
-```java
+```scala
 class AsyncDatabaseRequest extends AsyncFunction[String, (String, String)] {
 
     lazy val client: DatabaseClient = new DatabaseClient(host, post, credentials)
